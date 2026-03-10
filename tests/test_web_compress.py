@@ -13,7 +13,37 @@ def check(cond, name):
     print(f"  {symbol} {name}")
     (PASSED if cond else ERRORS).append(name)
 
-PDF_PATH = r"C:\tmp\test_compress.pdf" if sys.platform == "win32" else "/tmp/test_compress.pdf"
+import os, tempfile, pathlib
+
+# 自動建立測試 PDF（不依賴外部路徑）
+_TMP_DIR = pathlib.Path(tempfile.gettempdir())
+PDF_PATH = str(_TMP_DIR / "pdf_compress_test.pdf")
+
+def _make_test_pdf(path: str) -> None:
+    """建立最小有效 PDF（含重複文字讓壓縮效果明顯）"""
+    content = b'BT /F1 12 Tf 50 750 Td (PDF Compression Test) Tj ET\n' * 200
+    objs = [
+        b'1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+        b'2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+        b'3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]'
+        b' /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n',
+        f'4 0 obj\n<< /Length {len(content)} >>\nstream\n'.encode() + content + b'\nendstream\nendobj\n',
+        b'5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+    ]
+    pdf = b'%PDF-1.4\n'
+    offs = []
+    for o in objs:
+        offs.append(len(pdf)); pdf += o
+    xref = len(pdf)
+    pdf += b'xref\n' + f'0 {len(objs)+1}\n'.encode() + b'0000000000 65535 f \n'
+    for off in offs:
+        pdf += f'{off:010d} 00000 n \n'.encode()
+    pdf += b'trailer\n' + f'<< /Size {len(objs)+1} /Root 1 0 R >>\n'.encode()
+    pdf += b'startxref\n' + f'{xref}\n'.encode() + b'%%EOF\n'
+    with open(path, 'wb') as f:
+        f.write(pdf)
+
+_make_test_pdf(PDF_PATH)
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
@@ -26,14 +56,14 @@ with sync_playwright() as p:
 
     print("\n── 1. 載入頁面 ──────────────────────────────────────")
     page.goto("http://localhost:8080", wait_until="networkidle")
-    page.screenshot(path="/tmp/step1_loaded.png")
+    page.screenshot(path=str(_TMP_DIR / "step1_loaded.png"))
     check(page.locator("#drop-zone").is_visible(), "頁面載入成功")
 
     print("\n── 2. 上傳 PDF 檔案 ──────────────────────────────────")
     # 使用 file input 上傳
     page.locator("#file-input").set_input_files(PDF_PATH)
     page.wait_for_timeout(500)
-    page.screenshot(path="/tmp/step2_file_added.png")
+    page.screenshot(path=str(_TMP_DIR / "step2_file_added.png"))
 
     file_count = page.locator("#file-count").text_content()
     print(f"  file-count: {file_count}")
@@ -54,7 +84,7 @@ with sync_playwright() as p:
 
     print("\n── 4. 執行壓縮（等待 WASM 載入，最多 120 秒）────────")
     page.locator("#btn-compress").click()
-    page.screenshot(path="/tmp/step3_compressing.png")
+    page.screenshot(path=str(_TMP_DIR / "step3_compressing.png"))
 
     # 等待壓縮完成（進度條到 100% 或 download 按鈕啟用）
     start = time.time()
@@ -79,7 +109,7 @@ with sync_playwright() as p:
             status = page.locator("#progress-status").text_content() or ""
             print(f"  ({elapsed}s) 狀態: {status}")
 
-    page.screenshot(path="/tmp/step4_done.png")
+    page.screenshot(path=str(_TMP_DIR / "step4_done.png"))
     check(done, f"壓縮完成（{'成功' if done else '超時'}）")
 
     if done:

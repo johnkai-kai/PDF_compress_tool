@@ -22,3 +22,10 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Claude Code 本地設定（不應進版控）
+.claude/
+
+# 測試用暫存 PDF
+tests/tmp/
+C:/tmp/test_compress*.pdf
