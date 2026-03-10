@@ -257,39 +257,58 @@ async function startCompression() {
 
   dom.progressFill.classList.add('done');
   dom.btnDownload.disabled = (success === 0);
+  // 動態更新下載按鈕文字
+  if (dom.btnDownload) {
+    dom.btnDownload.innerHTML = success === 1
+      ? `<svg viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M7.5 1v9M4 7l3.5 3.5L11 7" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 13h11" stroke-linecap="round"/></svg> 下載 PDF`
+      : `<svg viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M7.5 1v9M4 7l3.5 3.5L11 7" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 13h11" stroke-linecap="round"/></svg> 下載 ZIP`;
+  }
   state.isCompressing = false;
   dom.btnCompress.disabled = false;
   updateStats();
 
   if (success > 0) {
-    showToast(`壓縮完成！成功 ${success} 個檔案，按「下載 ZIP」取得結果`, 'success');
+    const hint = success === 1 ? '按「下載 PDF」取得結果' : '按「下載 ZIP」取得全部結果';
+    showToast(`壓縮完成！成功 ${success} 個檔案，${hint}`, 'success');
   }
 }
 
-// ─── ZIP 下載 ─────────────────────────────────────────────────────────────
+// ─── 下載 ────────────────────────────────────────────────────────────────
 async function downloadZip() {
   const done = state.files.filter((f) => f.status === 'done' && f.compData);
   if (done.length === 0) return;
 
-  // JSZip 已透過 HTML 的 <script> 標籤在全域載入
+  // 單一檔案：直接下載 PDF（不包 ZIP，確保 Adobe 可開啟）
+  if (done.length === 1) {
+    const entry = done[0];
+    const outName = entry.file.name.replace(/\.pdf$/i, '_compressed.pdf');
+    const blob = new Blob([entry.compData], { type: 'application/pdf' });
+    _triggerDownload(blob, outName);
+    return;
+  }
+
+  // 多個檔案：打包成 ZIP
   if (!window.JSZip) {
     showToast('JSZip 尚未載入，請重新整理頁面', 'error');
     return;
   }
-
   const zip = new window.JSZip();
   done.forEach((entry) => {
-    const outName = entry.file.name.replace(/\.pdf$/i, '_compressed.pdf');
-    zip.file(outName, entry.compData);
+    zip.file(entry.file.name.replace(/\.pdf$/i, '_compressed.pdf'), entry.compData);
   });
-
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
+  _triggerDownload(blob, 'compressed_pdfs.zip');
+}
+
+function _triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
   a.href     = url;
-  a.download = done.length === 1
-    ? done[0].file.name.replace(/\.pdf$/i, '_compressed.pdf')
-    : 'compressed_pdfs.zip';
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
