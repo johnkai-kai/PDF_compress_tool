@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF Compressor — Kilo Code Style</title>
+  <meta name="description" content="免費線上 PDF 壓縮工具。支援批量壓縮，四種品質等級，全程於瀏覽器本機執行，不上傳任何資料。" />
+  <link rel="stylesheet" href="./css/style.css" />
+  <!-- JSZip for batch ZIP download -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body>
+<div class="app">
+
+  <!-- ─── Header ──────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-brand">
+      <!-- PDF 圖示 -->
+      <svg class="header-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M4 2h8l4 4v12H4V2z" stroke-linejoin="round"/>
+        <path d="M12 2v4h4" stroke-linejoin="round"/>
+        <path d="M7 10h6M7 13h4" stroke-linecap="round"/>
+      </svg>
+      <span class="header-title">PDF Compressor</span>
+      <span class="header-badge">v1.0.0</span>
+    </div>
+    <div class="header-links">
+      <a class="header-link" href="https://github.com/johnkai-kai/PDF_compress_tool" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 005.47 7.59c.4.07.55-.17.55-.38v-1.34c-2.23.49-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.71 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.66 7.66 0 018 4.07c.68 0 1.36.09 2 .26 1.52-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.19c0 .21.15.46.55.38A8 8 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        GitHub
+      </a>
+    </div>
+  </header>
+
+  <!-- ─── Main ─────────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- 拖放區域 -->
+    <div id="drop-zone" class="drop-zone">
+      <svg class="drop-zone-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M16 22V10M16 10l-4 4M16 10l4 4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M6 26h20" stroke-linecap="round"/>
+        <rect x="2" y="4" width="28" height="24" rx="3" stroke-opacity="0.3"/>
+      </svg>
+      <p class="drop-zone-text">
+        <strong>拖放 PDF 至此</strong>，或選擇檔案
+      </p>
+      <div class="drop-zone-actions">
+        <button class="btn-select" id="btn-select">選擇單一檔案</button>
+        <button class="btn-select" id="btn-select-multi">批量選擇</button>
+      </div>
+      <input type="file" id="file-input" accept=".pdf,application/pdf" />
+    </div>
+
+    <!-- 中間列：品質 / 清單 / 統計 -->
+    <div class="middle-row">
+
+      <!-- 品質選擇面板 -->
+      <div class="panel">
+        <div class="panel-header">壓縮品質</div>
+        <div class="panel-body">
+          <ul class="quality-list">
+            <li class="quality-item" data-quality="screen">
+              <input type="radio" name="quality" value="screen" />
+              <span class="quality-radio"></span>
+              <div class="quality-info">
+                <span class="quality-label">低（螢幕）</span>
+                <span class="quality-desc">線上分享 · 最小體積</span>
+              </div>
+            </li>
+            <li class="quality-item" data-quality="ebook">
+              <input type="radio" name="quality" value="ebook" />
+              <span class="quality-radio"></span>
+              <div class="quality-info">
+                <span class="quality-label">中（電子書）</span>
+                <span class="quality-desc">電郵 · 平板閱讀</span>
+              </div>
+            </li>
+            <li class="quality-item" data-quality="printer">
+              <input type="radio" name="quality" value="printer" />
+              <span class="quality-radio"></span>
+              <div class="quality-info">
+                <span class="quality-label">高（列印）</span>
+                <span class="quality-desc">辦公室列印品質</span>
+              </div>
+            </li>
+            <li class="quality-item" data-quality="extreme">
+              <input type="radio" name="quality" value="extreme" />
+              <span class="quality-radio"></span>
+              <div class="quality-info">
+                <span class="quality-label">極限（最小）</span>
+                <span class="quality-desc">儲存空間嚴格受限</span>
+              </div>
+            </li>
+          </ul>
+          <hr class="quality-divider" />
+          <div class="quality-estimate">
+            <div class="quality-estimate-label">預估節省</div>
+            <div class="quality-estimate-value" id="estimate-value">40–60%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 檔案清單面板 -->
+      <div class="panel file-list-panel">
+        <div class="panel-header">
+          待壓縮清單
+          <span id="file-count" style="font-weight:400;color:var(--text-secondary)">0 個檔案</span>
+        </div>
+        <div class="panel-body">
+          <div id="file-list-empty" class="file-list-empty">
+            尚未選擇任何 PDF<br/>
+            <span style="font-size:11px;color:var(--text-secondary)">支援批量拖放</span>
+          </div>
+          <div id="file-list"></div>
+        </div>
+        <div class="panel-footer">
+          <span class="panel-count" id="panel-total-size"></span>
+          <button class="btn-clear" id="btn-clear">清除全部</button>
+        </div>
+      </div>
+
+      <!-- 大小統計面板 -->
+      <div class="panel stats-panel">
+        <div class="panel-header">大小對比</div>
+        <div class="panel-body">
+          <div class="stat-row">
+            <span class="stat-label">原始大小</span>
+            <span class="stat-value" id="stat-orig">—</span>
+          </div>
+          <hr class="stat-divider" />
+          <div class="stat-row">
+            <span class="stat-label">壓縮後大小</span>
+            <span class="stat-value" id="stat-comp">—</span>
+          </div>
+          <hr class="stat-divider" />
+          <div class="stat-row">
+            <span class="stat-label">節省空間</span>
+            <span class="stat-savings" id="stat-savings">—</span>
+          </div>
+          <hr class="stat-divider" />
+          <p class="stat-note">
+            壓縮前顯示估算值，<br/>壓縮後更新為實際數值。<br/>
+            全程於瀏覽器本機執行，<br/>不上傳任何資料。
+          </p>
+        </div>
+      </div>
+
+    </div><!-- /middle-row -->
+
+    <!-- 進度列 -->
+    <div class="progress-section">
+      <div class="progress-header">
+        <span class="progress-status" id="progress-status">就緒</span>
+        <span class="progress-pct" id="progress-pct"></span>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+    </div>
+
+    <!-- 操作按鈕列 -->
+    <div class="action-row">
+      <button class="btn-primary" id="btn-compress" disabled>
+        <svg viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M7.5 2v11M3 9l4.5 4.5L12 9" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        開始壓縮
+      </button>
+      <button class="btn-secondary" id="btn-download" disabled>
+        <svg viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M7.5 1v9M4 7l3.5 3.5L11 7" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 13h11" stroke-linecap="round"/>
+        </svg>
+        下載 ZIP
+      </button>
+      <div class="action-spacer"></div>
+      <span class="action-hint" id="action-hint"></span>
+    </div>
+
+    <!-- 壓縮結果表格（壓縮後顯示） -->
+    <div id="results-section" class="results-section" style="display:none;">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>檔案名稱</th>
+            <th>原始大小</th>
+            <th>壓縮後大小</th>
+            <th>節省</th>
+            <th>狀態</th>
+          </tr>
+        </thead>
+        <tbody id="results-tbody"></tbody>
+      </table>
+    </div>
+
+  </main><!-- /main -->
+
+</div><!-- /app -->
+
+<!-- WASM 載入 Overlay -->
+<div id="wasm-loading" class="wasm-loading">
+  <div class="wasm-spinner"></div>
+  <span id="wasm-loading-msg">載入 Ghostscript WASM 中...</span>
+</div>
+
+<!-- Toast 容器 -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- 監聽檔案選擇啟用壓縮按鈕（需在 app.js 之後） -->
+<script type="module">
+  import { QUALITY_PRESETS, DEFAULT_QUALITY } from './js/compressor.js';
+
+  // 讓 btnCompress 在有檔案時啟用（由 app.js 的 renderFileList 管理）
+  // 此處覆寫以確保初始狀態正確
+  const btnCompress = document.getElementById('btn-compress');
+  const observer = new MutationObserver(() => {
+    const fileList = document.getElementById('file-list');
+    const hasFiles = fileList && fileList.children.length > 0;
+    btnCompress.disabled = !hasFiles;
+  });
+  const fileList = document.getElementById('file-list');
+  if (fileList) {
+    observer.observe(fileList, { childList: true });
+  }
+</script>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+name: Build Windows EXE & Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+
+env:
+  PYTHON_VERSION: '3.11'
+  GS_VERSION: '10.03.1'       # Ghostscript 版本（更新時修改此處）
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Python 環境 ──────────────────────────────────────────────────
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller PyQt6
+
+      # ── 下載 Ghostscript Portable ────────────────────────────────────
+      - name: Download Ghostscript (Windows 64-bit)
+        shell: pwsh
+        run: |
+          $gs_ver = "${{ env.GS_VERSION }}"
+          $gs_ver_nodot = $gs_ver -replace '\.', ''
+          $url = "https://github.com/ArtifexSoftware/ghostpdl-downloads/releases/download/gs${gs_ver_nodot}/gs${gs_ver_nodot}w64.exe"
+          Write-Host "Downloading Ghostscript from: $url"
+          Invoke-WebRequest -Uri $url -OutFile gs_installer.exe -UseBasicParsing
+
+      - name: Extract Ghostscript Portable
+        shell: pwsh
+        run: |
+          # 靜默安裝至臨時目錄
+          $install_dir = "${{ github.workspace }}\gs_install"
+          Start-Process -FilePath gs_installer.exe -ArgumentList "/S /D=$install_dir" -Wait
+
+          # 複製執行所需的最小檔案至 desktop/gs_bin/
+          New-Item -ItemType Directory -Force -Path desktop\gs_bin
+
+          # 尋找 gswin64c.exe
+          $gs_exe = Get-ChildItem -Path $install_dir -Recurse -Filter "gswin64c.exe" | Select-Object -First 1
+          if ($gs_exe) {
+            Write-Host "Found gswin64c.exe at: $($gs_exe.FullName)"
+            Copy-Item $gs_exe.FullName desktop\gs_bin\
+            # 複製同目錄的 DLL
+            Copy-Item (Join-Path $gs_exe.DirectoryName "*.dll") desktop\gs_bin\ -ErrorAction SilentlyContinue
+          } else {
+            Write-Error "gswin64c.exe not found!"
+            exit 1
+          }
+
+          Write-Host "Contents of desktop/gs_bin:"
+          Get-ChildItem desktop\gs_bin
+
+      # ── PyInstaller 打包 ─────────────────────────────────────────────
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller desktop/pdf_compressor.spec --distpath dist --workpath build_tmp --clean
+
+      - name: Verify EXE
+        run: |
+          if (Test-Path "dist/PDF_Compressor.exe") {
+            $size = (Get-Item "dist/PDF_Compressor.exe").Length
+            Write-Host "EXE size: $([math]::Round($size/1MB, 2)) MB"
+          } else {
+            Write-Error "EXE not found!"
+            exit 1
+          }
+        shell: pwsh
+
+      # ── 上傳 Artifact ────────────────────────────────────────────────
+      - name: Upload EXE Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDF_Compressor_Windows
+          path: dist/PDF_Compressor.exe
+          retention-days: 7
+
+  # ── 建立 GitHub Release ───────────────────────────────────────────────
+  create-release:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download EXE Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: PDF_Compressor_Windows
+          path: ./release
+
+      - name: Get Tag Name
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "PDF Compressor ${{ steps.tag.outputs.tag }}"
+          body: |
+            ## PDF Compressor ${{ steps.tag.outputs.tag }}
+
+            ### 下載
+            - **PDF_Compressor.exe** — Windows 64-bit 獨立執行檔（無需安裝 Python 或 Ghostscript）
+
+            ### Web 版
+            直接在瀏覽器使用：https://johnkai-kai.github.io/PDF_compress_tool/
+
+            ### 功能
+            - 四種壓縮品質等級（螢幕 / 電子書 / 列印 / 極限）
+            - 批量壓縮 PDF
+            - 顯示壓縮前後大小對比
+            - 自訂輸出資料夾（預設：同目錄，加 _compressed 後綴）
+            - 全程本機執行，不上傳任何資料
+
+            ### 系統需求
+            - Windows 10 / 11 (64-bit)
+          files: ./release/PDF_Compressor.exe
+          draft: false
+          prerelease: false
